@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Multi-File Uploader</title>
+    <link rel="stylesheet" href="Styles/Styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#5865F2">
+    <link rel="stylesheet" href="Styles/ImgPrevStyle.css">
+</head>
+<body>
+    <div id="backgroundLayer" aria-hidden="true"></div>
+    <div class="container">
+        <h1>Discord File Uploader</h1>
+        
+        <div class="main-content">
+            <!-- Panel izquierdo - Configuración -->
+            <div class="config-panel">
+                <!-- Panel de gestión de webhooks -->
+                <div class="webhook-panel">
+                    <h2>Webhook Management</h2>
+                    
+                    <!-- Selector de categoría -->
+                    <div class="category-controls">
+                        <select id="categorySelector" class="category-select">
+                            <option value="">Select a category</option>
+                        </select>
+                        <button id="addCategoryBtn" class="btn primary"></button>
+                    </div>
+                    
+                    <!-- Formulario para nueva categoría -->
+                    <div id="categoryForm" class="category-form hidden">
+                        <h3>Add New Category</h3>
+                        <input type="text" id="categoryName" placeholder="Category name" class="category-input">
+                        <div class="form-actions">
+                            <button id="saveCategoryBtn" class="btn save">Save</button>
+                            <button id="editCategoryBtn" class="btn edit" disabled>Edit Category</button>
+                            <button id="deleteCategoryBtn" class="btn danger" disabled>Delete Category</button>
+                            <button id="cancelCategoryBtn" class="btn primary">Cancel</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Selector de webhook -->
+                    <div class="webhook-controls">
+                        <select id="webhookSelector" class="webhook-select" disabled>
+                            <option value="">Select a webhook</option>
+                        </select>
+                        <button id="addWebhookBtn" class="btn primary"></button>
+                    </div>
+                    
+                    <!-- Formulario para nuevo webhook -->
+                    <div id="webhookForm" class="webhook-form hidden">
+                        <h3>Add New Webhook</h3>
+                        <input type="text" id="webhookName" placeholder="Webhook name" class="webhook-input">
+                        <input type="text" id="webhookUrl" placeholder="https://discord.com/api/webhooks/..." class="webhook-input">
+                        
+                        <div class="form-actions">
+                            <button id="saveWebhookBtn" class="btn save">Save</button>
+                            <button id="editWebhookBtn" class="btn edit" disabled>Edit Webhook</button>
+                            <button id="deleteWebhookBtn" class="btn danger" disabled>Delete Webhook</button>
+                            <button id="cancelWebhookBtn" class="btn primary">Cancel</button>
+                        </div>
+                    </div>
+
+                    <div id="botForm" class="bot-form hidden">
+                        <h3>Bot Configuration</h3>
+                        <input type="text" id="botToken" placeholder="Bot Token" class="bot-input">
+                        <input type="text" id="channelId" placeholder="Channel ID" class="bot-input">
+                        <div class="form-actions">
+                            <button id="saveBotBtn" class="btn save">Save</button>
+                            <button id="editBotBtn" class="btn edit" disabled>Edit Bot</button>
+                            <button id="deleteBotBtn" class="btn danger" disabled>Delete Bot</button>
+                            <button id="cancelBotBtn" class="btn primary">Cancel</button>
+                        </div>
+                    </div>
+                    <!-- Acciones de archivo -->
+                    <div class="file-actions">
+                        <button id="exportBtn" class="btn primary">Export Configuration</button>
+                        <!-- <button id="exportWithImagesBtn" class="btn primary">Export with images</button> -->
+                        <button id="importBtn" class="btn primary">Import Configuration</button>
+                        <input type="file" id="importFile" accept=".txt" class="hidden">
+                    </div>
+                    <!-- Modal para restaurar selección tras import -->
+                    <div id="restoreModal" class="restore-modal hidden">
+                        <div class="restore-modal-content">
+                            <h3 id="restoreModalTitle">Restore selections?</h3>
+                            <p id="restoreModalMessage">The imported config contains a previous selection. Do you want to restore it?</p>
+                            <div class="form-actions" style="justify-content:flex-end; margin-top:10px;">
+                                <button id="restoreModalNo" class="btn primary">No</button>
+                                <button id="restoreModalYes" class="btn save">Yes, restore</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Panel de subida -->
+                <div class="upload-controls">
+                    <h2>File Upload</h2>
+                    <div class="selection-container">
+                        <div class="selection-row">
+                            <span class="selection-label">Category:</span> 
+                            <span id="currentCategoryDisplay" class="selection-value">None selected</span>
+                        </div>
+                        <div class="selection-row">
+                            <span class="selection-label">Webhook:</span> 
+                            <span id="currentWebhookDisplay" class="selection-value">None selected</span>
+                            <!-- <img id="webhookAvatarPreview" src="images/default-avatar.png" alt="webhook avatar" style="width:40px;height:40px;border-radius:50%;margin-left:8px;vertical-align:middle;">
+                            <button class="avatar-change-btn" data-side="webhook" style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;margin-left:6px;"> 
+                                <i class="fas fa-sync-alt"></i>
+                            </button> -->
+                        </div>
+                    </div>
+                    
+                    <input type="file" id="fileInput" multiple accept="image/*,video/*">
+                    <p class="file-info">Max 10 files, total size must not exceed 10MB</p>
+                    <button id="uploadButton" class="btn primary" disabled>Upload Files</button>
+                    <button id="installButton" class="btn primary" style="display: none; margin-top: 10px;">
+                        <i class="fas fa-download">Install App</i>
+                    </button>
+                    <div id="response" class="response-box"></div>
+                </div>
+            </div>
+
+            <!-- Panel derecho - Previsualización -->
+            <div class="preview-panel">
+                <div class="preview-header">
+                    <div class="webhook-avatar left">
+                        <div class="selection-row">
+                            <img id="webhookAvatarPreview" src="images/default-avatar.png" alt="webhook avatar">
+                            <button class="avatar-change-btn" data-side="webhook"> 
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div> 
+                    <!-- <div class="webhook-avatar left" id="leftAvatarContainer">
+                        <img id="webhookAvatarLeft" src="images/default-avatar.png" alt="Webhook avatar">
+                        <button class="avatar-change-btn" data-side="left">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div> -->
+                    <h2>File Preview</h2>
+                    <div class="webhook-avatar right">
+                        <div class="selection-row">
+                            <img id="webhookAvatarPreview2" src="images/default-avatar.png" alt="webhook avatar">
+                            <button class="avatar-change-btn" data-side="webhook"> 
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div> 
+                    <!-- <div class="webhook-avatar right" id="rightAvatarContainer">
+                        <img id="webhookAvatarRight" src="images/default-avatar.png" alt="Webhook avatar">
+                        <button class="avatar-change-btn" data-side="right">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div> -->
+                </div>
+                <div class="bg-controls">
+                    <div class="preview-row" style="grid-column:1 / -1; display:flex; justify-content:center;">
+                        <div id="bgMiniPreview" class="bg-mini-preview collapsible hidden" aria-hidden="true"></div>
+                    </div>
+                    <div class="top-row">
+                        <button id="bgMoreToggle" class="btn" title="More options">More</button>
+                        <div id="bgOptions" class="hidden collapsible" aria-hidden="true">
+                            <input type="checkbox" id="bgEnableToggle" style="display:none;" aria-hidden="true">
+                            <button id="bgEnableToggleBtn" class="btn" title="Toggle background">Background</button>
+                            <button id="bgPreviewToggle" class="btn" title="Toggle preview width">Width</button>
+                            <button id="bgMiniToggleBtn" class="btn" title="Show/Hide mini preview">Preview</button>
+                            <button id="bgSlidersToggle" class="btn" title="Show/Hide sliders">Sliders</button>
+                            <button id="bgMiniSlidersToggle" class="btn" title="Mini preview sliders">Mini Sliders</button>
+                        </div>
+                    </div>
+                    <div id="bgSliders" class="collapsed collapsible" aria-hidden="true">
+                        <div id="bgSlidersRow" class="bg-sliders-row">
+                            <div class="slider-item">
+                                <label for="bgOpacityRange">Opacity</label>
+                                <input type="range" id="bgOpacityRange" min="0" max="1" step="0.05" value="0.35">
+                            </div>
+                            <div class="slider-item">
+                                <label for="bgBlurRange">Blur</label>
+                                <input type="range" id="bgBlurRange" min="0" max="20" step="1" value="6">
+                            </div>
+                            <div class="slider-item">
+                                <label for="bgPosHRange">Horizontal</label>
+                                <input type="range" id="bgPosHRange" min="0" max="100" step="1" value="50">
+                            </div>
+                            <div class="slider-item">
+                                <label for="bgPosVRange">Vertical</label>
+                                <input type="range" id="bgPosVRange" min="0" max="100" step="1" value="50">
+                            </div>
+                            <div class="slider-item">
+                                <label for="bgRotateRange">Rotate</label>
+                                <input type="range" id="bgRotateRange" min="-180" max="180" step="1" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Mini-preview specific sliders -->
+                    <div id="bgMiniSliders" class="collapsed collapsible" aria-hidden="true">
+                        <div id="bgMiniSlidersRow" class="bg-sliders-row">
+                            <div class="slider-item">
+                                <label for="miniOpacityRange">Opacity</label>
+                                <input type="range" id="miniOpacityRange" min="0" max="1" step="0.05" value="1">
+                            </div>
+                            <!-- <div class="slider-item">
+                                <label for="miniBlurRange">Blur</label>
+                                <input type="range" id="miniBlurRange" min="0" max="20" step="1" value="0">
+                            </div> -->
+                            <div class="slider-item">
+                                <label for="miniPosHRange">Horizontal</label>
+                                <input type="range" id="miniPosHRange" min="0" max="100" step="1" value="50">
+                            </div>
+                            <div class="slider-item">
+                                <label for="miniPosVRange">Vertical</label>
+                                <input type="range" id="miniPosVRange" min="0" max="100" step="1" value="50">
+                            </div>
+                            <!-- <div class="slider-item">
+                                <label for="miniRotateRange">Rotate</label>
+                                <input type="range" id="miniRotateRange" min="-180" max="180" step="1" value="0">
+                            </div> -->
+                        </div>
+                    </div>
+                </div>
+                <div id="previewContainer" class="preview-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal unificado para selección de avatares -->
+    <div id="avatarModal" class="avatar-modal-overlay">
+        <div class="avatar-modal-content">
+            <div class="avatar-modal-header">
+                <h3 class="avatar-modal-title" id="avatarModalTitle">Select Avatar</h3>
+                <button class="avatar-modal-close">&times;</button>
+            </div>
+            
+            <div class="avatar-modal-options">
+                <div class="avatar-modal-option" data-avatar="default">
+                    <img src="images/default-avatar.png" alt="Default Avatar">
+                    <span>Default</span>
+                </div>
+                <div class="avatar-modal-option" data-avatar="default2">
+                    <img src="images/default-avatar1.png" alt="Default Avatar 2">
+                    <span>Default 2</span>
+                </div>
+                <div class="avatar-modal-option" data-avatar="default3">
+                    <img src="images/default-avatar2.png" alt="Default Avatar 3">
+                    <span>Default 3</span>
+                </div>
+            </div>
+            
+            <div class="avatar-modal-custom">
+                <h4>Custom Avatar</h4>
+                <div id="avatarModalCustomPreview" class="hidden">
+                    <img id="avatarModalCustomImg" src="" alt="Custom Avatar Preview" style="max-width: 100px;">
+                </div>
+                <input type="file" id="avatarModalFileInput" accept="image/*" class="hidden">
+                <button id="avatarModalCustomBtn" class="btn primary">
+                    <i class="fas fa-upload"></i> Upload Custom Avatar
+                </button>
+            </div>
+            
+            <div class="avatar-modal-actions">
+                <button id="avatarModalCancel" class="btn primary">Cancel</button>
+                <button id="avatarModalConfirm" class="btn save">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="Scripts/Script.js"></script>
+    <script src="Scripts/ImgPrevScript.js"></script>
+</body>
+</html>
