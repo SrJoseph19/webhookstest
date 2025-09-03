@@ -6,7 +6,7 @@
     <title>Discord Multi-File Uploader</title>
     <link rel="stylesheet" href="Styles/Styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="/webhookstest/manifest.json">
     <meta name="theme-color" content="#5865F2">
     <link rel="stylesheet" href="Styles/ImgPrevStyle.css">
 </head>
@@ -270,5 +270,13 @@
 
     <script src="Scripts/Script.js"></script>
     <script src="Scripts/ImgPrevScript.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/webhookstest/service-worker.js')
+        .then(reg => console.log('Service Worker registrado con scope:', reg.scope))
+        .catch(err => console.log('Error registrando SW:', err));
+    }
+    </script>
+
 </body>
 </html>
