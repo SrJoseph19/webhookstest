@@ -1,0 +1,21 @@
+{
+  "name": "WebhookUploader",
+  "short_name": "Discord Uploader",
+  "description": "Una aplicación para subir archivos a Discord mediante webhooks",
+  "start_url": "/webhookstest/",
+  "display": "standalone",
+  "background_color": "#5865F2",
+  "theme_color": "#5865F2",
+  "icons": [
+    {
+      "src": "/webhookstest/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "/webhookstest/icon-512.png",
+      "type": "image/png"
+    }
+  ]
+}

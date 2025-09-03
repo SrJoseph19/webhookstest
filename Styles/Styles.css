@@ -1,0 +1,969 @@
+:root {
+    --primary-color: #5865F2;
+    --secondary-color: #4e5d94;
+    --background-color: #36393f;
+    --card-bg: #2f3136;
+    --text-color: #ffffff;
+    --border-color: #40444b;
+    --success-color: #43b581;
+    --danger-color: #f04747;
+    --warning-color: #faa61a;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    padding: 20px;
+    transition: background-image 0.4s ease, background-color 0.4s ease;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+h1, h2, h3 {
+    margin-bottom: 15px;
+    color: var(--text-color);
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: var(--primary-color);
+}
+
+.main-content {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.config-panel {
+    flex: 1;
+    min-width: 300px;
+}
+
+.preview-panel {
+    flex: 2;
+    min-width: 400px;
+}
+
+.webhook-panel, .upload-controls, .preview-container {
+    /* Match the translucent glass style used in .bg-controls */
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Add a subtle overlay behind main container to improve readability */
+.container::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Ensure main UI sits above the overlay */
+.container, .main-content, .webhook-panel, .upload-controls, .preview-panel {
+    position: relative;
+    z-index: 1;
+}
+
+/* Full-screen background layer used for webhook image background */
+#backgroundLayer {
+    position: fixed;
+    inset: 0;
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    z-index: -1; /* sit behind everything */
+    transition: opacity 0.3s ease, filter 0.3s ease, background-image 0.4s ease;
+    opacity: 0; /* default off */
+}
+
+/* Modernized background controls - compact grid, soft visuals */
+.bg-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px; /* slightly tighter */
+    align-items: center;
+    padding: 8px 8px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.03);
+    /* let rows size naturally */
+    grid-auto-rows: auto;
+}
+
+/* Top row inside background controls for toggle buttons */
+.bg-controls .top-row {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column; /* stack More above options */
+    gap: 8px;
+    align-items: stretch;
+    padding: 6px 8px;
+    position: relative;
+    z-index: 5; /* keep buttons above nearby layers */
+}
+.bg-controls .top-row .btn {
+    width: 100%;
+    text-align: center;
+    border-radius: 999px;
+    padding: 8px 14px;
+    margin: 0; /* vertical spacing controlled by gap */
+}
+
+/* Make the "More" button sit on top and the options appear full-width below it */
+.bg-controls .top-row #bgMoreToggle {
+    width: 100%;
+    transition: transform 220ms ease, opacity 180ms ease;
+}
+
+.bg-controls .top-row #bgMoreToggle.active {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.16);
+}
+
+/* Ensure the bgOptions container sits below the More button and displays options in a grid */
+.bg-controls .top-row #bgOptions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    margin-top: 6px;
+}
+
+/* Sliders hide/show */
+#bgSliders {
+    transition: max-height 0.28s ease, opacity 0.28s ease, margin 0.28s ease;
+    overflow: hidden;
+    max-height: 400px; /* large enough to show all sliders */
+    opacity: 1;
+}
+#bgSliders.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Make the sliders container span the full controls width */
+#bgSliders {
+    grid-column: 1 / -1;
+}
+
+/* Mini-preview sliders should mirror the layout but be independent */
+#bgMiniSliders {
+    transition: max-height 0.28s ease, opacity 0.28s ease, margin 0.28s ease;
+    overflow: hidden;
+    max-height: 400px;
+    opacity: 1;
+    grid-column: 1 / -1;
+    margin-top: 6px;
+}
+#bgMiniSliders.collapsed { max-height: 0; opacity: 0; margin-top: 0; margin-bottom: 0; }
+
+/* Arrange sliders as a single row with equal spacing */
+.bg-sliders-row {
+    display: grid;
+    /* responsive: auto-fit so the sliders wrap when space is constrained */
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+.bg-sliders-row .slider-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+    justify-content: center;
+}
+.bg-sliders-row .slider-item label {
+    color: rgba(255,255,255,0.9);
+    font-size: 0.95rem;
+}
+.bg-sliders-row .slider-item input[type="range"] {
+    width: 100%;
+    min-width: 100px;
+    margin: 0 auto;
+    box-sizing: border-box;
+    /* add top padding so the thumb doesn't get clipped by overflow parents */
+    
+    padding-bottom: 8px;
+    height: 18px; /* provide enough height for thumb */
+}
+
+/* Center mini preview and make it prominent */
+.preview-row { justify-content: center; }
+.preview-row { padding-top: 6px; padding-bottom: 6px; }
+.bg-mini-preview { width: 200px; aspect-ratio: 5/3; height: auto; border-radius: 10px; }
+
+/* Responsive: stack sliders on small screens */
+@media (max-width: 720px) {
+    .bg-sliders-row { grid-template-columns: 1fr; }
+    .bg-sliders-row .slider-item input[type="range"] { width: 100%; }
+    .bg-mini-preview { width: 100%; height: 120px; }
+
+    /* On narrow/vertical screens, keep the More button on top and show options below in 2 columns */
+    .bg-controls .top-row {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+        padding: 6px 6px;
+    }
+    .bg-controls .top-row .btn {
+        width: 100%;
+        min-width: 0;
+        justify-self: stretch;
+    }
+    /* Options container sits under the More button and forms two columns */
+    .bg-controls .top-row #bgOptions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        width: 100%;
+        align-items: center;
+    }
+}
+
+/* If options container only has one visible button, make it span full width */
+.bg-controls .top-row #bgOptions.single {
+    grid-template-columns: 1fr;
+}
+.bg-controls .top-row #bgOptions.single .btn {
+    width: 100%;
+}
+
+/* Labels inside bg-controls should be compact and subtle */
+.bg-controls label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    color: rgba(255,255,255,0.9);
+    padding: 6px 8px;
+    min-width: 0; /* allow label to shrink in tight containers */
+}
+
+/* Modern range inputs */
+.bg-controls input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    /* make range flexible so it doesn't overflow its container */
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    /* Use the JS-set --range-fill (0..1) to show the filled portion of the track */
+    background: linear-gradient(90deg,
+        rgba(88,101,242,0.95) calc(var(--range-fill, 0) * 100%),
+        rgba(255,255,255,0.06) calc(var(--range-fill, 0) * 100%)
+    );
+    padding: 0; /* keep zero here, per-item padding applied where needed */
+    border-radius: 999px;
+    outline: none;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.35);
+}
+
+.bg-controls input[type="range"]:hover { transform: translateY(-1px); }
+
+/* ensure ranges inside labels shrink gracefully */
+.bg-controls label input[type="range"] { flex: 1 1 auto; min-width: 0; width: 100%; }
+
+.bg-controls input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    box-shadow: 0 2px 6px rgba(88,101,242,0.35);
+    border: 2px solid rgba(255,255,255,0.85);
+    cursor: pointer;
+    /* don't use negative margin (can be clipped), rely on input height/padding instead */
+}
+
+/* WebKit track so fill aligns nicely under the thumb */
+.bg-controls input[type="range"]::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: 999px;
+    background: transparent; /* track background comes from the input element using --range-fill */
+}
+
+/* Firefox track */
+.bg-controls input[type="range"]::-moz-range-track {
+    height: 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg,
+        rgba(88,101,242,0.95) calc(var(--range-fill, 0) * 100%),
+        rgba(255,255,255,0.06) calc(var(--range-fill, 0) * 100%)
+    );
+}
+
+.bg-controls input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    box-shadow: 0 2px 6px rgba(88,101,242,0.35);
+    border: 2px solid rgba(255,255,255,0.85);
+    cursor: pointer;
+    /* Firefox usually centers the thumb automatically; tweak if necessary */
+}
+
+/* Button-style toggles inside bg-controls */
+.bg-controls .btn {
+    padding: 6px 10px;
+    font-size: 0.95rem;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.04);
+}
+.bg-controls .btn.primary {
+    background: var(--primary-color);
+    color: white;
+    border-color: rgba(0,0,0,0.08);
+}
+
+/* Make checkbox fit the visual style */
+.bg-controls input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
+}
+
+/* Mini preview box with soft shadow and rounded corners */
+.bg-mini-preview {
+    width: 160px;
+    aspect-ratio: 5/3;
+    height: auto;
+    border-radius: 10px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: 50% 50%;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    transition: transform 0.3s ease, filter 0.3s ease, opacity 0.25s ease, max-height 260ms ease;
+}
+
+.bg-mini-preview:hover { transform: translateY(-4px) scale(1.02); filter: saturate(1.06); }
+
+/* center the mini preview inside the grid cell */
+.bg-controls .bg-mini-preview {
+    /* Default: compact fixed-size preview centered in its cell */
+    justify-self: center;
+    align-self: center;
+    display: block;
+    margin: 0 auto;
+    width: 160px;
+    height: 96px;
+}
+
+/* `.hidden` for mini-preview should not use display:none (so transitions can run).
+   Use collapsible + .open for animated show/hide. Keep hidden for initial ARIA state. */
+.bg-controls .bg-mini-preview.hidden {
+    /* after the close transition completes we fully hide it to remove borders/shadows */
+    opacity: 0;
+    pointer-events: none;
+    display: none; /* fully remove from layout once hidden */
+}
+
+/* When the preview should span the full width (toggled via JS), apply this modifier */
+.bg-mini-preview.full-width {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 120px;
+    border-radius: 8px;
+}
+
+/* Animated collapsible behavior for mini-preview */
+.bg-mini-preview.collapsible {
+    --mini-expanded-h: 400px;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: max-height 260ms ease, opacity 220ms ease, transform 220ms ease;
+}
+.bg-mini-preview.collapsible.open {
+    max-height: var(--mini-expanded-h); /* adjustable expanded height */
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Subtle squeeze animation when sliders expand/contract */
+.bg-mini-preview.squeezed {
+    transform: scale(0.96) translateY(0);
+    opacity: 0.95;
+    transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.category-controls, .webhook-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.category-select, .webhook-select {
+    flex: 1;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+    color: var(--text-color);
+}
+
+.btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.btn.primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn.primary:hover {
+    background-color: var(--secondary-color);
+}
+
+.btn.settings {
+    background-color: var(--warning-color);
+}
+
+.btn.settings:hover {
+    background-color: #e5940d;
+}
+
+.btn.danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #d83737;
+}
+
+.btn.save {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-save:hover {
+    background-color: #3a9c6d;
+}
+
+.btn.edit {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.btn-edit:hover {
+    background-color: #e5940d;
+}
+
+.category-form, .webhook-form, .bot-form {
+    margin-top: 15px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.category-input, .webhook-input, .bot-input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+    color: var(--text-color);
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Collapsible animated container used for bgOptions and sliders */
+.collapsible {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transform-origin: top center;
+    transition: max-height 260ms ease, opacity 220ms ease, transform 220ms ease;
+}
+.collapsible.open {
+    opacity: 1;
+    max-height: 800px; /* large enough to expand fully */
+    transform: translateY(0);
+}
+
+.selection-container {
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.selection-row {
+    display: flex;
+    margin-bottom: px;
+}
+
+.selection-label {
+    font-weight: bold;
+    min-width: 80px;
+}
+
+.selection-value {
+    color: var(--primary-color);
+}
+
+#fileInput {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px dashed var(--border-color);
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+}
+
+.file-info {
+    font-size: 0.9rem;
+    color: #b9bbbe;
+    margin-bottom: 15px;
+}
+
+.response-box {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.webhook-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    position: relative;
+    overflow: hidden;
+    border: 3px solid var(--primary-color);
+    transition: transform 0.3s;
+}
+
+.webhook-avatar img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    object-fit: cover;
+    transition: opacity 0.3s;
+}
+
+.webhook-avatar:hover {
+    transform: scale(1.05);
+}
+
+.avatar-change-btn {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    background-color: transparent;
+    color: transparent;
+    border: none;
+    border-radius: 50%;
+    width: 100%;
+    height: 100%;
+    /* background-color: var(--primary-color);
+    color: white; */
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+}
+
+.webhook-avatar:hover .avatar-change-btn {
+    opacity: 1;
+}
+
+.avatar-change-btn i { font-size: 14px; }
+
+.preview-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 15px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding: 15px;
+    /* keep translucent appearance consistent (no blur) */
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.03);
+    border-radius: 8px;
+}
+
+.preview-item {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    transition: transform 0.2s;
+}
+
+.preview-item:hover {
+    transform: translateY(-5px);
+}
+
+.preview-media, .uploaded-media {
+    max-width: 100%;
+    max-height: 150px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.preview-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.remove-btn {
+    padding: 6px 10px;
+    background-color: var(--danger-color);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.remove-btn:hover {
+    background-color: #c83c3c;
+}
+
+.file-icon {
+    font-size: 40px;
+    margin-bottom: 8px;
+}
+
+.file-name {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 5px;
+}
+
+.file-size {
+    font-size: 0.8rem;
+    color: #b9bbbe;
+    margin-bottom: 8px;
+}
+
+.url-input {
+    width: 100%;
+    padding: 5px;
+    font-size: 0.8rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-color);
+    margin-bottom: 8px;
+}
+
+.copy-btn {
+    width: 100%;
+    padding: 5px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.copy-btn:hover {
+    background-color: var(--secondary-color);
+}
+
+.file-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .config-panel, .preview-panel {
+        min-width: 100%;
+    }
+    
+    .preview-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+    }
+    
+    .webhook-avatar.left, .webhook-avatar.right {
+        order: -1;
+    }
+
+    /* Responsive background controls: stack vertically and make sliders full width */
+    .bg-controls {
+        /* switch the grid to a single-column layout on small screens */
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .bg-controls label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .bg-controls input[type="range"] {
+        width: 100% !important;
+        max-width: none;
+    }
+
+    .bg-mini-preview {
+        width: 100%;
+        height: 120px;
+        margin-left: 0;
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.preview-item {
+    animation: fadeIn 0.3s ease-in;
+}
+
+/* Scrollbar styling */
+.preview-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.preview-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.preview-container::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.preview-container::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+
+/* Botón de instalación PWA */
+#installButton {
+    display: none;
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* Estados de carga */
+.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Transiciones para elementos que se muestran/ocultan */
+.category-form, .webhook-form, .bot-form {
+    transition: all 0.3s ease;
+}
+
+/* Mejoras de accesibilidad */
+.btn:focus, .category-select:focus, .webhook-select:focus, 
+.category-input:focus, .webhook-input:focus, .bot-input:focus,
+#fileInput:focus, .url-input:focus, .copy-btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Estados deshabilitados */
+.btn:disabled, .category-select:disabled, .webhook-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Estilos para el modal de avatar */
+.avatar-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.avatar-modal-content {
+    background-color: var(--card-bg);
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 90%;
+    max-height: 80%;
+    overflow-y: auto;
+    width: 400px;
+    color: var(--text-color);
+}
+
+.avatar-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.avatar-modal-title {
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.avatar-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #999;
+}
+
+.avatar-modal-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.avatar-modal-option {
+    text-align: center;
+    cursor: pointer;
+    padding: 10px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.avatar-modal-option:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+}
+
+.avatar-modal-option.selected {
+    border-color: var(--primary-color);
+    background-color: rgba(88, 101, 242, 0.1);
+}
+
+.avatar-modal-option img {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 5px;
+}
+
+.avatar-modal-custom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.avatar-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+/* Modal amigable para restaurar selecciones al importar */
+.restore-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.6);
+    z-index: 1100;
+}
+
+.restore-modal.hidden { display: none; }
+
+.restore-modal-content {
+    background: var(--card-bg);
+    padding: 18px;
+    border-radius: 10px;
+    width: 360px;
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+#restoreModalTitle { color: var(--primary-color); margin: 0 0 8px 0; }
+
+#restoreModalMessage { color: #cfcfcf; }

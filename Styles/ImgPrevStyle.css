@@ -1,0 +1,200 @@
+
+        /* Estilos adicionales para el modal unificado */
+        /* Estilos para el modal de avatar */
+        .avatar-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .avatar-modal-content {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            width: 400px;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .avatar-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .avatar-modal-title {
+            margin: 0;
+            color: var(--primary-color);
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .avatar-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #b9bbbe;
+            transition: color 0.2s;
+        }
+
+        .avatar-modal-close:hover {
+            color: var(--text-color);
+        }
+
+        .avatar-modal-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .avatar-modal-option {
+            text-align: center;
+            cursor: pointer;
+            padding: 10px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            transition: all 0.2s;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .avatar-modal-option:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+            background-color: rgba(88, 101, 242, 0.1);
+        }
+
+        .avatar-modal-option.selected {
+            border-color: var(--primary-color);
+            background-color: rgba(88, 101, 242, 0.2);
+        }
+
+        .avatar-modal-option img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-bottom: 5px;
+            border: 2px solid var(--border-color);
+        }
+
+        .avatar-modal-option span {
+            color: var(--text-color);
+            font-size: 0.9rem;
+            display: block;
+        }
+
+        .avatar-modal-custom {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 5px;
+            padding-top: 10px;
+            margin-bottom: 15px;
+        }
+
+        .avatar-modal-custom h4 {
+            margin: 0 0 10px 0;
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+
+        #avatarModalCustomBtn {
+            margin-top: 5px;
+            padding: 8px 15px;
+            font-size: 0.9rem;
+        }
+
+        #avatarModalCustomPreview {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        #avatarModalCustomPreview img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 10%;
+            border: 2px solid var(--primary-color);
+        }
+
+        .avatar-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        #avatarModalCancel {
+            background-color: var(--border-color);
+            color: var(--text-color);
+        }
+
+        #avatarModalCancel:hover {
+            background-color: #5c6370;
+        }
+
+        #avatarModalConfirm {
+            background-color: var(--primary-color);
+        }
+
+        #avatarModalConfirm:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .avatar-modal-option {
+            text-align: center;
+            cursor: pointer;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        
+        .avatar-modal-option:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+        
+        .avatar-modal-option.selected {
+            border-color: var(--primary-color);
+            background-color: rgba(88, 101, 242, 0.1);
+        }
+        
+        .avatar-modal-option img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-bottom: 5px;
+        }
+        
+        .avatar-modal-custom {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        
+        .avatar-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 15px;
+        }
