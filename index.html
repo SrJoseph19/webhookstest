@@ -9,7 +9,22 @@
     <link rel="manifest" href="/webhookstest/manifest.json">
     <meta name="theme-color" content="#5865F2">
     <link rel="stylesheet" href="Styles/ImgPrevStyle.css">
+    
 <script>
+  // Registrar Service Worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/webhookstest/service-worker.js')
+        .then(function(registration) {
+          console.log('Service Worker registrado con scope:', registration.scope);
+        })
+        .catch(function(error) {
+          console.log('Error registrando SW:', error);
+        });
+    });
+  }
+
+  // Manejar instalación de PWA
   let deferredPrompt;
   const installBtn = document.getElementById('installBtn');
   const installButton = document.getElementById('installButton');
@@ -19,11 +34,11 @@
     deferredPrompt = e;
     
     // Muestra ambos botones de instalación
-    installBtn.style.display = 'inline-block';
-    installButton.style.display = 'inline-block';
+    if (installBtn) installBtn.style.display = 'inline-block';
+    if (installButton) installButton.style.display = 'inline-block';
 
-    installBtn.addEventListener('click', installApp);
-    installButton.addEventListener('click', installApp);
+    if (installBtn) installBtn.addEventListener('click', installApp);
+    if (installButton) installButton.addEventListener('click', installApp);
   });
 
   function installApp() {
@@ -38,16 +53,72 @@
         deferredPrompt = null;
         
         // Oculta los botones después de la instalación
-        installBtn.style.display = 'none';
-        installButton.style.display = 'none';
+        if (installBtn) installBtn.style.display = 'none';
+        if (installButton) installButton.style.display = 'none';
       });
     }
   }
 
   window.addEventListener('appinstalled', (evt) => {
     console.log('Aplicación instalada correctamente');
-    installBtn.style.display = 'none';
-    installButton.style.display = 'none';
+    if (installBtn) installBtn.style.display = 'none';
+    if (installButton) installButton.style.display = 'none';
+  });
+</script>
+    <script>
+  // Generar iconos temporalmente si no existen
+  document.addEventListener('DOMContentLoaded', function() {
+    // Solo generar si estamos en localhost o si los iconos no cargan
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      console.log('Modo desarrollo: usando iconos temporales');
+      
+      // Crear iconos temporales en canvas (solo para desarrollo)
+      const createTempIcon = (size, name) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        // Fondo
+        ctx.fillStyle = '#5865F2';
+        ctx.fillRect(0, 0, size, size);
+        
+        // Texto
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `bold ${size/5}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('D', size/2, size/2);
+        
+        // Convertir a data URL
+        return canvas.toDataURL('image/png');
+      };
+      
+      // Reemplazar src de los iconos en el manifest
+      const manifestElement = document.querySelector('link[rel="manifest"]');
+      if (manifestElement) {
+        const manifestUrl = manifestElement.href;
+        fetch(manifestUrl)
+          .then(response => response.json())
+          .then(manifest => {
+            manifest.icons.forEach(icon => {
+              if (icon.sizes === '192x192') {
+                icon.src = createTempIcon(192, 'icon-192');
+              } else if (icon.sizes === '512x512') {
+                icon.src = createTempIcon(512, 'icon-512');
+              }
+            });
+            
+            // Crear nuevo blob con el manifest actualizado
+            const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+            const newManifestUrl = URL.createObjectURL(blob);
+            manifestElement.href = newManifestUrl;
+          })
+          .catch(error => {
+            console.log('Error loading manifest:', error);
+          });
+      }
+    }
   });
 </script>
 </head>
