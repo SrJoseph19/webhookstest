@@ -829,41 +829,106 @@ function importConfiguration(file) {
         previewContainer.innerHTML = '';
 
         try {
-            const formData = new FormData();
-            // Usar una copia de los archivos seleccionados para mantener la referencia
+            // Batch files by both count and cumulative size so each message:
+            // - contains at most 10 files (Discord limit per message)
+            // - has total bytes <= MAX_BATCH_BYTES (user expects ~10 MB)
             const filesToUpload = selectedFiles.slice();
-            filesToUpload.forEach(file => {
-                formData.append('files', file);
-            });
+            const MAX_FILES_PER_BATCH = 10;
+            const MAX_BATCH_BYTES = 10 * 1024 * 1024; // 10 MB
 
-            const response = await fetch(currentWebhook.url, {
-                method: 'POST',
-                body: formData
-            });
+            const batches = [];
+            let currentBatch = [];
+            let currentBytes = 0;
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            for (let i = 0; i < filesToUpload.length; i++) {
+                const f = filesToUpload[i];
+                const fsize = typeof f.size === 'number' ? f.size : 0;
+
+                // If single file exceeds limit, put it alone in a batch (will likely fail server-side)
+                if (fsize > MAX_BATCH_BYTES) {
+                    if (currentBatch.length > 0) {
+                        batches.push(currentBatch);
+                        currentBatch = [];
+                        currentBytes = 0;
+                    }
+                    batches.push([f]);
+                    continue;
+                }
+
+                // If adding this file would exceed file count or size, close current batch
+                if (currentBatch.length + 1 > MAX_FILES_PER_BATCH || (currentBytes + fsize) > MAX_BATCH_BYTES) {
+                    if (currentBatch.length > 0) {
+                        batches.push(currentBatch);
+                    }
+                    currentBatch = [f];
+                    currentBytes = fsize;
+                } else {
+                    currentBatch.push(f);
+                    currentBytes += fsize;
+                }
             }
 
-            const responseData = await response.json();
+            if (currentBatch.length > 0) batches.push(currentBatch);
 
-            if (responseData.attachments && responseData.attachments.length > 0) {
-                responseData.attachments.forEach((attachment, index) => {
-                    const file = filesToUpload[index];
-                    const previewElement = createPreviewElement(file, attachment.url);
-                    previewContainer.appendChild(previewElement);
-                });
-
-                // Limpiar selección después de subir
-                selectedFiles = [];
-                fileInput.value = '';
-                const dtClear = new DataTransfer();
-                fileInput.files = dtClear.files;
-
-                showNotification(`Successfully uploaded ${responseData.attachments.length} files!`);
+            let totalSent = 0;
+            // show total batches to user
+            if (batches.length > 1) {
+                responseDiv.textContent = `Uploading ${filesToUpload.length} files in ${batches.length} batches...`;
             } else {
-                showNotification('Upload completed but no file URLs returned.', true);
+                responseDiv.textContent = `Uploading ${filesToUpload.length} files...`;
             }
+
+            for (let b = 0; b < batches.length; b++) {
+                // per-batch progress
+                responseDiv.textContent = `Uploading batch ${b + 1} of ${batches.length} (${batches[b].length} files)...`;
+                const chunk = batches[b];
+                const fd = new FormData();
+                for (let j = 0; j < chunk.length; j++) {
+                    fd.append(`files[${j}]`, chunk[j], chunk[j].name);
+                }
+
+                try {
+                    const resp = await fetch(currentWebhook.url, { method: 'POST', body: fd });
+                    if (!resp.ok) {
+                        console.error('Batch upload failed', resp.status, await resp.text().catch(() => ''));
+                        continue; // try next batch
+                    }
+
+                    let result = null;
+                    try { result = await resp.json(); } catch (e) { result = null; }
+
+                    if (result && result.attachments && result.attachments.length > 0) {
+                        result.attachments.forEach((attachment, aidx) => {
+                            const file = chunk[aidx] || null;
+                            const previewElement = createPreviewElement(file || { name: attachment.filename || 'file' }, attachment.url);
+                            previewContainer.appendChild(previewElement);
+                            try { panelFiles.push({ id: attachment.id || (attachment.url + '-' + Date.now()), file: file, url: attachment.url }); } catch (e) { /* ignore */ }
+                            totalSent++;
+                        });
+                    } else if (result && result.url) {
+                        const previewElement = createPreviewElement(chunk[0], result.url);
+                        previewContainer.appendChild(previewElement);
+                        try { panelFiles.push({ id: result.id || (result.url + '-' + Date.now()), file: chunk[0], url: result.url }); } catch (e) { /* ignore */ }
+                        totalSent++;
+                    } else {
+                        console.warn('Batch upload returned no attachments', result);
+                    }
+                } catch (err) {
+                    console.error('Error uploading batch', err);
+                }
+
+                // small delay between batches
+                await new Promise(r => setTimeout(r, 350));
+            }
+
+            // Clear selection after attempting upload
+            selectedFiles = [];
+            fileInput.value = '';
+            const dtClear = new DataTransfer();
+            fileInput.files = dtClear.files;
+
+            if (totalSent > 0) showNotification(`Successfully uploaded ${totalSent} files!`);
+            else showNotification('Upload completed but no file URLs returned.', true);
         } catch (error) {
             console.error('Error uploading files:', error);
             showNotification('Error uploading files. Check console for details.', true);
@@ -882,16 +947,29 @@ function importConfiguration(file) {
         previewContainer.innerHTML = '';
         if (!selectedFiles || selectedFiles.length === 0) return;
 
-        selectedFiles.forEach((file, index) => {
-            const previewElement = document.createElement('div');
-            previewElement.className = 'preview-item';
+        // Create placeholders in the correct order so async FileReader completions
+        // can't reorder the displayed items.
+        const placeholders = [];
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'preview-item';
+            placeholder.setAttribute('data-index', i);
+            // lightweight placeholder content while the file is read
+            placeholder.innerHTML = `<div class="preview-loading">Loading...</div>`;
+            previewContainer.appendChild(placeholder);
+            placeholders.push(placeholder);
+        }
 
+        // Fill placeholders as reads complete
+        selectedFiles.forEach((file, index) => {
             const reader = new FileReader();
             reader.onload = function(e) {
+                const previewElement = placeholders[index];
+                if (!previewElement) return;
                 let mediaContent = '';
-                if (file.type.startsWith('image/')) {
+                if (file.type && file.type.startsWith('image/')) {
                     mediaContent = `<img src="${e.target.result}" alt="${file.name}" class="preview-media">`;
-                } else if (file.type.startsWith('video/')) {
+                } else if (file.type && file.type.startsWith('video/')) {
                     mediaContent = `<video controls class="preview-media"><source src="${e.target.result}" type="${file.type}"></video>`;
                 } else {
                     mediaContent = `<div class="file-icon">📄</div>`;
@@ -902,26 +980,30 @@ function importConfiguration(file) {
                     <p class="file-name" title="${file.name}">${file.name}</p>
                     <p class="file-size">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
                     <div class="preview-actions">
-                        <button class="remove-btn" data-index="${index}">Remove</button>
+                        <button class="remove-btn">Remove</button>
                     </div>
                 `;
 
-                previewContainer.appendChild(previewElement);
-
-                // Handler para remover archivo seleccionado
+                // Attach remove handler that reads the element's current data-index
                 const removeBtn = previewElement.querySelector('.remove-btn');
-                removeBtn.addEventListener('click', function() {
-                    const idx = parseInt(this.getAttribute('data-index'));
-                    if (isNaN(idx)) return;
-                    selectedFiles.splice(idx, 1);
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', function() {
+                        const parent = this.closest('.preview-item');
+                        if (!parent) return;
+                        const idxStr = parent.getAttribute('data-index');
+                        const idx = parseInt(idxStr, 10);
+                        if (isNaN(idx)) return;
 
-                    // Actualizar fileInput.files usando DataTransfer
-                    const dt = new DataTransfer();
-                    selectedFiles.forEach(f => dt.items.add(f));
-                    fileInput.files = dt.files;
+                        // Remove the file from the selectedFiles array and rebuild inputs
+                        selectedFiles.splice(idx, 1);
+                        const dt = new DataTransfer();
+                        selectedFiles.forEach(f => dt.items.add(f));
+                        fileInput.files = dt.files;
 
-                    renderSelectedPreviews();
-                });
+                        // Re-render previews to refresh indices and placeholders
+                        renderSelectedPreviews();
+                    });
+                }
             };
             reader.readAsDataURL(file);
         });
