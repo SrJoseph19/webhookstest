@@ -22,6 +22,9 @@
     <div class="container">
         <h1>Discord File Uploader</h1>
         
+<button id="installBtn" style="display:none;">Instalar aplicación</button>
+
+        
         <div class="main-content">
             <!-- Panel izquierdo - Configuración -->
             <div class="config-panel">
@@ -277,5 +280,36 @@
 
     <script src="Scripts/Script.js"></script>
     <script src="Scripts/ImgPrevScript.js"></script>
+    <script>
+  let deferredPrompt;
+  const installBtn = document.getElementById('installBtn');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Previene el comportamiento automático
+    e.preventDefault();
+    // Guarda el evento para usarlo luego
+    deferredPrompt = e;
+    // Muestra el botón de instalación
+    installBtn.style.display = 'inline-block';
+
+    installBtn.addEventListener('click', () => {
+      // Muestra el prompt de instalación
+      deferredPrompt.prompt();
+      // Espera la respuesta del usuario
+      deferredPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('✅ Usuario aceptó instalar la app');
+        } else {
+          console.log('❌ Usuario rechazó la instalación');
+        }
+        // Limpia el prompt
+        deferredPrompt = null;
+        // Oculta el botón
+        installBtn.style.display = 'none';
+      });
+    });
+  });
+</script>
+
 </body>
 </html>
