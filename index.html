@@ -9,13 +9,47 @@
     <link rel="manifest" href="/webhookstest/manifest.json">
     <meta name="theme-color" content="#5865F2">
     <link rel="stylesheet" href="Styles/ImgPrevStyle.css">
-    <script>
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/webhookstest/service-worker.js')
-        .then(reg => console.log('Service Worker registrado con scope:', reg.scope))
-        .catch(err => console.log('Error registrando SW:', err));
+<script>
+  let deferredPrompt;
+  const installBtn = document.getElementById('installBtn');
+  const installButton = document.getElementById('installButton');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    
+    // Muestra ambos botones de instalación
+    installBtn.style.display = 'inline-block';
+    installButton.style.display = 'inline-block';
+
+    installBtn.addEventListener('click', installApp);
+    installButton.addEventListener('click', installApp);
+  });
+
+  function installApp() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('Usuario aceptó instalar la app');
+        } else {
+          console.log('Usuario rechazó la instalación');
+        }
+        deferredPrompt = null;
+        
+        // Oculta los botones después de la instalación
+        installBtn.style.display = 'none';
+        installButton.style.display = 'none';
+      });
     }
-    </script>
+  }
+
+  window.addEventListener('appinstalled', (evt) => {
+    console.log('Aplicación instalada correctamente');
+    installBtn.style.display = 'none';
+    installButton.style.display = 'none';
+  });
+</script>
 </head>
 <body>
     <div id="backgroundLayer" aria-hidden="true"></div>
@@ -280,36 +314,7 @@
 
     <script src="Scripts/Script.js"></script>
     <script src="Scripts/ImgPrevScript.js"></script>
-    <script>
-  let deferredPrompt;
-  const installBtn = document.getElementById('installBtn');
 
-  window.addEventListener('beforeinstallprompt', (e) => {
-    // Previene el comportamiento automático
-    e.preventDefault();
-    // Guarda el evento para usarlo luego
-    deferredPrompt = e;
-    // Muestra el botón de instalación
-    installBtn.style.display = 'inline-block';
-
-    installBtn.addEventListener('click', () => {
-      // Muestra el prompt de instalación
-      deferredPrompt.prompt();
-      // Espera la respuesta del usuario
-      deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === 'accepted') {
-          console.log('✅ Usuario aceptó instalar la app');
-        } else {
-          console.log('❌ Usuario rechazó la instalación');
-        }
-        // Limpia el prompt
-        deferredPrompt = null;
-        // Oculta el botón
-        installBtn.style.display = 'none';
-      });
-    });
-  });
-</script>
 
 </body>
 </html>
