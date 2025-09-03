@@ -1,14 +1,14 @@
 const CACHE_NAME = 'discord-uploader-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/Styles/Styles.css',
-  '/Styles/ImgPrevStyle.css',
-  '/Scripts/Script.js',
-  '/Scripts/ImgPrevScript.js',
-  '/images/default-avatar.png',
-  '/images/default-avatar1.png',
-  '/images/default-avatar2.png'
+  '/webhookstest/',
+  '/webhookstest/index.html',
+  '/webhookstest/Styles/Styles.css',
+  '/webhookstest/Styles/ImgPrevStyle.css',
+  '/webhookstest/Scripts/Script.js',
+  '/webhookstest/Scripts/ImgPrevScript.js',
+  '/webhookstest/images/default-avatar.png',
+  '/webhookstest/images/default-avatar1.png',
+  '/webhookstest/images/default-avatar2.png'
 ];
 
 self.addEventListener('install', event => {
@@ -16,6 +16,9 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         return cache.addAll(urlsToCache);
+      })
+      .catch(error => {
+        console.log('Error al cachear recursos:', error);
       })
   );
   self.skipWaiting();
@@ -29,8 +32,7 @@ self.addEventListener('fetch', event => {
           return response;
         }
         return fetch(event.request);
-      }
-    )
+      })
   );
 });
 
