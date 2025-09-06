@@ -29,6 +29,9 @@ let currentCategory = null;
 let currentWebhook = null;
 const CONFIG_FILE_NAME = 'DiscordWebhooks.txt';
 
+// (history/undo removed) -- keep only direct offset persistence
+// ...existing code...
+
 // Variables para avatares
 let leftAvatar = 'default';
 let rightAvatar = 'default';
@@ -40,15 +43,20 @@ let selectedFiles = [];
 let _lastBackgroundObjectUrl = null;
     // IndexedDB helpers for storing avatar blobs
     const IDB_DB_NAME = 'webhookAvatars';
+    const IDB_VERSION = 3; // bump for offsets
     const IDB_STORE_NAME = 'avatars';
+    const IDB_OFFSETS_STORE = 'offsets';
 
     function openIdb() {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open(IDB_DB_NAME, 1);
+            const req = indexedDB.open(IDB_DB_NAME, IDB_VERSION);
             req.onupgradeneeded = function(e) {
                 const db = e.target.result;
                 if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
                     db.createObjectStore(IDB_STORE_NAME);
+                }
+                if (!db.objectStoreNames.contains(IDB_OFFSETS_STORE)) {
+                    db.createObjectStore(IDB_OFFSETS_STORE);
                 }
             };
             req.onsuccess = function(e) { resolve(e.target.result); };
@@ -88,83 +96,81 @@ let _lastBackgroundObjectUrl = null;
             req.onerror = (e) => { reject(e.target.error); db.close(); };
         });
     }
-
-    // Helper: detect whether an image File/Blob is animated (GIF, animated WebP, or APNG)
-    // Returns a Promise<boolean>.
-    function fileIsAnimated(file) {
-        return new Promise(async (resolve) => {
-            try {
-                if (!file || !file.type) return resolve(false);
-                const t = file.type.toLowerCase();
-                if (t === 'image/gif') return resolve(true);
-
-                // For WebP and PNG we need to inspect the binary for animation chunks
-                const maxRead = Math.min(file.size, 16384); // read up to 16KB
-                const blob = file.slice(0, maxRead);
-                const ab = await blob.arrayBuffer();
-                const bytes = new Uint8Array(ab);
-                const text = new TextDecoder('latin1').decode(bytes);
-
-                if (t === 'image/webp') {
-                    // Animated WebP contains an 'ANIM' chunk
-                    if (text.indexOf('ANIM') !== -1) return resolve(true);
-                }
-
-                if (t === 'image/png') {
-                    // APNG has an 'acTL' chunk
-                    if (text.indexOf('acTL') !== -1) return resolve(true);
-                }
-
-                // Fallback: not detected as animated
-                return resolve(false);
-            } catch (e) {
-                // on error, assume not animated
-                return resolve(false);
-            }
-        });
-    }
-
-    // Helper: convert image File to compressed Blob (resize and JPEG compress)
-    // NOTE: Animated GIFs must NOT be rasterized via canvas because that flattens them
-    // into a single-frame raster image; for GIFs we return the original File/Blob to
-    // preserve animation in previews and when storing to IndexedDB.
-    async function fileToCompressedBlob(file, maxWidth = 256, quality = 0.8) {
-        if (!file) throw new Error('No file provided');
-        if (!file.type || !file.type.startsWith('image/')) throw new Error('Not an image file');
-
-        // Check animation first; if animated return original blob/file to preserve animation
-        try {
-            const animated = await fileIsAnimated(file);
-            if (animated) return file;
-        } catch (e) {
-            // ignore and continue to compression
-        }
-
+    
+    // Offsets helpers in IDB
+    async function idbPutOffset(key, offset) {
+        const db = await openIdb();
         return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const img = new Image();
-                img.onload = () => {
-                    const scale = Math.min(1, maxWidth / img.width);
-                    const w = Math.max(1, Math.round(img.width * scale));
-                    const h = Math.max(1, Math.round(img.height * scale));
-                    const canvas = document.createElement('canvas');
-                    canvas.width = w;
-                    canvas.height = h;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, w, h);
-                    canvas.toBlob(blob => {
-                        if (blob) resolve(blob);
-                        else reject(new Error('Compression failed'));
-                    }, 'image/jpeg', quality);
-                };
-                img.onerror = (err) => reject(err);
-                img.src = reader.result;
-            };
-            reader.onerror = (err) => reject(err);
-            reader.readAsDataURL(file);
+            const tx = db.transaction(IDB_OFFSETS_STORE, 'readwrite');
+            const store = tx.objectStore(IDB_OFFSETS_STORE);
+            const req = store.put(JSON.stringify(offset), key);
+            req.onsuccess = () => { resolve(true); db.close(); };
+            req.onerror = (e) => { reject(e.target.error); db.close(); };
         });
     }
+
+    async function idbGetOffset(key) {
+        const db = await openIdb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_OFFSETS_STORE, 'readonly');
+            const store = tx.objectStore(IDB_OFFSETS_STORE);
+            const req = store.get(key);
+            req.onsuccess = (e) => { try { resolve(e.target.result ? JSON.parse(e.target.result) : null); } catch (err) { resolve(null); } finally { db.close(); } };
+            req.onerror = (e) => { reject(e.target.error); db.close(); };
+        });
+    }
+
+    async function idbDeleteOffset(key) {
+        const db = await openIdb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_OFFSETS_STORE, 'readwrite');
+            const store = tx.objectStore(IDB_OFFSETS_STORE);
+            const req = store.delete(key);
+            req.onsuccess = () => { resolve(true); db.close(); };
+            req.onerror = (e) => { reject(e.target.error); db.close(); };
+        });
+    }
+
+    // History helpers removed
+
+    // Clear all offsets from IDB and legacy localStorage
+    async function clearAllOffsets() {
+        try {
+            const db = await openIdb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(IDB_OFFSETS_STORE, 'readwrite');
+                const store = tx.objectStore(IDB_OFFSETS_STORE);
+                const req = store.clear();
+                req.onsuccess = () => {
+                    try { localStorage.removeItem('previewOffsets'); } catch (e) { /* ignore */ }
+                    db.close();
+                    resolve(true);
+                };
+                req.onerror = (e) => { db.close(); reject(e.target.error); };
+            });
+        } catch (e) {
+            // If IDB not available, at least remove legacy localStorage
+            try { localStorage.removeItem('previewOffsets'); } catch (e2) { /* ignore */ }
+            return true;
+        }
+    }
+
+    // Migrate existing localStorage previewOffsets into IDB on init
+    async function migrateOffsetsFromLocalStorage() {
+        try {
+            const raw = localStorage.getItem('previewOffsets');
+            if (!raw) return;
+            const map = JSON.parse(raw);
+            if (!map || typeof map !== 'object') return;
+            const keys = Object.keys(map);
+            for (let k of keys) {
+                try { await idbPutOffset(k, map[k]); } catch (e) { /* ignore per-key failures */ }
+            }
+            // Once migrated successfully, remove legacy storage
+            localStorage.removeItem('previewOffsets');
+        } catch (e) { /* ignore migration errors */ }
+    }
+    
 
     // Funciones auxiliares
     function generateId() {
@@ -221,6 +227,14 @@ let _lastBackgroundObjectUrl = null;
         };
 
         if (!currentWebhook) {
+            setBackground('');
+            body.style.backgroundColor = '';
+            return;
+        }
+
+        // Respect per-webhook background enabled flag: if disabled, ensure no background is shown
+        const enabled = currentWebhook.bgEnabled != null ? !!currentWebhook.bgEnabled : false;
+        if (!enabled) {
             setBackground('');
             body.style.backgroundColor = '';
             return;
@@ -310,14 +324,48 @@ let _lastBackgroundObjectUrl = null;
         const webhookAvatarPreview = document.getElementById('webhookAvatarPreview');
         const webhookAvatarPreview2 = document.getElementById('webhookAvatarPreview2');
     const webhookAvatarMain = document.getElementById('webhookAvatarMain');
+
+        // Helper to set an element to image or video depending on isVideo flag or blob type
+        const setMediaElement = (el, src, isVideo) => {
+            try {
+                if (!el) return;
+                const parent = el.parentNode;
+                const id = el.id;
+                // If we need a video but current is IMG, replace it
+                if (isVideo) {
+                    if (el.tagName === 'VIDEO') {
+                        el.src = src;
+                    } else {
+                        const v = document.createElement('video');
+                        v.id = id;
+                        v.autoplay = false;
+                        v.controls = true;
+                        v.src = src;
+                        v.style.maxWidth = '100%';
+                        parent.replaceChild(v, el);
+                    }
+                } else {
+                    if (el.tagName === 'IMG') {
+                        el.src = src;
+                    } else {
+                        const i = document.createElement('img');
+                        i.id = id;
+                        i.src = src;
+                        i.style.maxWidth = '100%';
+                        parent.replaceChild(i, el);
+                    }
+                }
+            } catch (e) { console.warn('setMediaElement failed', e); }
+        };
         
         // If a webhook is selected and it has its own avatar saved, prefer that for the webhook preview
         if (currentWebhook) {
-            // Helper to set src and revoke later
+            // Helper to set src and revoke later; chooses video/image based on blob.type
             const setBlobUrl = (blob, el) => {
                 if (!blob || !el) return;
                 const objUrl = URL.createObjectURL(blob);
-                el.src = objUrl;
+                const isVideo = blob.type && blob.type.startsWith('video/');
+                setMediaElement(el, objUrl, isVideo);
                 setTimeout(() => URL.revokeObjectURL(objUrl), 60 * 1000);
             };
 
@@ -327,22 +375,22 @@ let _lastBackgroundObjectUrl = null;
                 const previewKey = currentWebhook.avatarKey || currentWebhook.avatarBgKey;
                 idbGetBlob(previewKey).then(blob => {
                     if (blob) {
-                        if (webhookAvatarPreview) setBlobUrl(blob, webhookAvatarPreview);
-                        if (webhookAvatarPreview2) setBlobUrl(blob, webhookAvatarPreview2);
-                        if (webhookAvatarMain) setBlobUrl(blob, webhookAvatarMain);
+                                if (webhookAvatarPreview) setBlobUrl(blob, webhookAvatarPreview);
+                                if (webhookAvatarPreview2) setBlobUrl(blob, webhookAvatarPreview2);
+                                if (webhookAvatarMain) setBlobUrl(blob, webhookAvatarMain);
                     }
                 }).catch(err => {
                     console.warn('Failed to load avatar blob from IDB', err);
                     const fallback = currentWebhook.avatar || getAvatarUrl(currentWebhook.avatarType);
-                    if (webhookAvatarPreview) webhookAvatarPreview.src = fallback;
-                    if (webhookAvatarPreview2) webhookAvatarPreview2.src = fallback;
-                    if (webhookAvatarMain) webhookAvatarMain.src = fallback;
+                    if (webhookAvatarPreview) setMediaElement(webhookAvatarPreview, fallback, false);
+                    if (webhookAvatarPreview2) setMediaElement(webhookAvatarPreview2, fallback, false);
+                    if (webhookAvatarMain) setMediaElement(webhookAvatarMain, fallback, false);
                 });
             } else {
                 const src = currentWebhook.avatar || getAvatarUrl(currentWebhook.avatarType);
-                if (webhookAvatarPreview) webhookAvatarPreview.src = src;
-                if (webhookAvatarPreview2) webhookAvatarPreview2.src = src;
-                if (webhookAvatarMain) webhookAvatarMain.src = src;
+                if (webhookAvatarPreview) setMediaElement(webhookAvatarPreview, src, src && src.startsWith('data:video/'));
+                if (webhookAvatarPreview2) setMediaElement(webhookAvatarPreview2, src, src && src.startsWith('data:video/'));
+                if (webhookAvatarMain) setMediaElement(webhookAvatarMain, src, src && src.startsWith('data:video/'));
             }
         } else {
             // no webhook selected: reset main preview to default
@@ -350,13 +398,6 @@ let _lastBackgroundObjectUrl = null;
         }
 
         // Left/Right avatars: prefer per-webhook avatars if present, otherwise fallback to global
-        const setBlobUrl = (blob, el) => {
-            if (!blob || !el) return;
-            const objUrl = URL.createObjectURL(blob);
-            el.src = objUrl;
-            setTimeout(() => URL.revokeObjectURL(objUrl), 60 * 1000);
-        };
-
         // LEFT
         if (currentWebhook && (currentWebhook.leftAvatarType || currentWebhook.leftAvatarKey)) {
             if (currentWebhook.leftAvatarType === 'indexeddb' && currentWebhook.leftAvatarKey) {
@@ -371,7 +412,7 @@ let _lastBackgroundObjectUrl = null;
                 if (webhookAvatarLeft) webhookAvatarLeft.src = src;
             }
         } else {
-            if (webhookAvatarLeft) {
+                if (webhookAvatarLeft) {
                 webhookAvatarLeft.src = leftAvatar === 'custom' && leftCustomAvatar ? leftCustomAvatar : getAvatarUrl(leftAvatar);
             }
         }
@@ -413,9 +454,59 @@ let _lastBackgroundObjectUrl = null;
         updateUI();
     }
 
-    function setCurrentWebhook(webhook) {
+    async function setCurrentWebhook(webhook) {
         currentWebhook = webhook;
         updateUI();
+        // When selecting a webhook, restore any saved preview offsets to the avatar sliders
+        try {
+            if (currentWebhook && currentWebhook.previewOffset) {
+                const off = currentWebhook.previewOffset;
+                const h = document.getElementById('avatarPosHRange');
+                const v = document.getElementById('avatarPosVRange');
+                const r = document.getElementById('avatarRotateRange');
+                const s = document.getElementById('avatarScaleRange');
+                if (h) h.value = off.x ?? 0;
+                if (v) v.value = off.y ?? 0;
+                if (r) r.value = off.rotate ?? 0;
+                if (s) s.value = off.scale ? Math.round(off.scale * 100) : 100;
+                // trigger input events so transforms update
+                [h, v, r, s].forEach(el => { if (el) el.dispatchEvent(new Event('input')); });
+            }
+                // If not present in-memory, try restoring from IDB (then fallback to localStorage)
+                else if (currentWebhook) {
+                    try {
+                        const off = await idbGetOffset(currentWebhook.id);
+                        let used = off;
+                        if (!used) {
+                            try {
+                                const raw = localStorage.getItem('previewOffsets');
+                                const map = raw ? JSON.parse(raw) : null;
+                                used = map ? map[currentWebhook.id] : null;
+                            } catch (e) { /* ignore */ }
+                        }
+                        if (used) {
+                            const h = document.getElementById('avatarPosHRange');
+                            const v = document.getElementById('avatarPosVRange');
+                            const r = document.getElementById('avatarRotateRange');
+                            const s = document.getElementById('avatarScaleRange');
+                            if (h) h.value = used.x ?? 0;
+                            if (v) v.value = used.y ?? 0;
+                            if (r) r.value = used.rotate ?? 0;
+                            if (s) s.value = used.scale ? Math.round(used.scale * 100) : 100;
+                            [h, v, r, s].forEach(el => { if (el) el.dispatchEvent(new Event('input')); });
+                            // also copy into runtime webhook object so export will include it
+                            currentWebhook.previewOffset = used;
+                            for (let c of categories) {
+                                const idx = c.webhooks ? c.webhooks.findIndex(w => w.id === currentWebhook.id) : -1;
+                                if (idx !== -1) { c.webhooks[idx].previewOffset = used; break; }
+                            }
+                                        // no-op: history disabled
+                        }
+                    } catch (e) { /* ignore IDB/localStorage parse errors */ }
+                }
+        } catch (e) { /* ignore if sliders not present */ }
+        // Ensure mini preview/background updates when webhook selection or avatar changes
+        try { updateAppBackground(); } catch (e) { /* ignore */ }
     }
 
     // Funciones para CRUD
@@ -475,7 +566,7 @@ function addCategory() {
         }
     }
 
-    function addWebhook() {
+    async function addWebhook() {
         const name = webhookNameInput.value.trim();
         const url = webhookUrlInput.value.trim();
         
@@ -505,17 +596,17 @@ function addCategory() {
             createdAt: new Date().toISOString()
         };
         
-        saveWebhookToCategory(newWebhook);
+    await saveWebhookToCategory(newWebhook);
     }
 
-    function saveWebhookToCategory(webhook) {
+    async function saveWebhookToCategory(webhook) {
         const categoryIndex = categories.findIndex(c => c.id === currentCategory.id);
         if (categoryIndex !== -1) {
             categories[categoryIndex].webhooks.push(webhook);
             showForm(webhookForm, false);
             webhookNameInput.value = '';
             webhookUrlInput.value = '';
-            setCurrentWebhook(webhook);
+        await setCurrentWebhook(webhook);
             showNotification('Webhook added successfully!');
         }
     }
@@ -553,7 +644,7 @@ function addCategory() {
         }
     }
 
-    function deleteWebhook() {
+    async function deleteWebhook() {
         if (!currentCategory || !currentWebhook) return;
         
         if (confirm(`Are you sure you want to delete the webhook "${currentWebhook.name}"?`)) {
@@ -573,7 +664,19 @@ function addCategory() {
                 }
 
                 categories[categoryIndex].webhooks = categories[categoryIndex].webhooks.filter(w => w.id !== currentWebhook.id);
-                setCurrentWebhook(null);
+                // Also remove persisted preview offset for this webhook if present
+                try {
+                    const key = 'previewOffsets';
+                    const raw = localStorage.getItem(key);
+                    if (raw) {
+                        const map = JSON.parse(raw);
+                        if (map && map[currentWebhook.id]) {
+                            delete map[currentWebhook.id];
+                            localStorage.setItem(key, JSON.stringify(map));
+                        }
+                    }
+                } catch (e) { /* ignore */ }
+                await setCurrentWebhook(null);
                 showNotification('Webhook deleted successfully!');
             }
         }
@@ -591,7 +694,7 @@ function addCategory() {
                 : `<div class="file-icon">📄</div>`;
         
         previewElement.innerHTML = `
-            <a href="${url}" target="_blank">${mediaContent}</a>
+            <div class="media-wrap"><a href="${url}" target="_blank">${mediaContent}</a></div>
             <p class="file-name">${file.name}</p>
             <p class="file-size">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
             <input type="text" value="${url}" readonly class="url-input">
@@ -785,7 +888,7 @@ function importConfiguration(file) {
                             const wantRestore = await showRestoreModal(cat.name, wh ? wh.name : null);
                             if (wantRestore) {
                                 setCurrentCategory(cat);
-                                if (wh) setCurrentWebhook(wh);
+                                if (wh) await setCurrentWebhook(wh);
                                 restored = true;
                             }
                         }
@@ -793,7 +896,7 @@ function importConfiguration(file) {
 
                     if (!restored) {
                         setCurrentCategory(null);
-                        setCurrentWebhook(null);
+                        await setCurrentWebhook(null);
                     }
 
                     updateUI();
@@ -1074,8 +1177,8 @@ function importConfiguration(file) {
             return;
         }
         
-        const selectedWebhook = currentCategory.webhooks.find(w => w.id === selectedId);
-        setCurrentWebhook(selectedWebhook);
+    const selectedWebhook = currentCategory.webhooks.find(w => w.id === selectedId);
+    setCurrentWebhook(selectedWebhook);
     });
 
     // Import/Export
@@ -1084,6 +1187,29 @@ function importConfiguration(file) {
     importFileInput.addEventListener('change', (e) => {
         if (e.target.files[0]) importConfiguration(e.target.files[0]);
     });
+    // Clear offsets button (new)
+    const clearOffsetsBtn = document.getElementById('clearOffsetsBtn');
+    if (clearOffsetsBtn) {
+        clearOffsetsBtn.addEventListener('click', async () => {
+            try {
+                if (!confirm('Clear all stored avatar offsets? This cannot be undone.')) return;
+                await clearAllOffsets();
+                showNotification('All preview offsets cleared.');
+                // Reset sliders for current webhook
+                const h = document.getElementById('avatarPosHRange');
+                const v = document.getElementById('avatarPosVRange');
+                const r = document.getElementById('avatarRotateRange');
+                const s = document.getElementById('avatarScaleRange');
+                if (h) { h.value = 0; h.dispatchEvent(new Event('input')); }
+                if (v) { v.value = 0; v.dispatchEvent(new Event('input')); }
+                if (r) { r.value = 0; r.dispatchEvent(new Event('input')); }
+                if (s) { s.value = 100; s.dispatchEvent(new Event('input')); }
+            } catch (e) {
+                console.error('Failed to clear offsets', e);
+                showNotification('Failed to clear offsets', true);
+            }
+        });
+    }
 
     // Inicialización
     function initApp() {
@@ -1093,6 +1219,85 @@ function importConfiguration(file) {
     }
 
     initApp();
+
+    // Run migration from localStorage to IDB for offsets (best-effort)
+    migrateOffsetsFromLocalStorage().catch(() => { /* ignore */ });
+
+    // Restore saved offset helper (tries IDB -> localStorage -> in-memory)
+    async function restoreSavedOffsetForCurrentWebhook() {
+        try {
+            if (!currentWebhook) return null;
+            // prefer in-memory if already present
+            if (currentWebhook.previewOffset) return currentWebhook.previewOffset;
+            // try IDB
+            try {
+                const off = await idbGetOffset(currentWebhook.id);
+                if (off) {
+                    currentWebhook.previewOffset = off;
+                    // copy into categories array
+                    for (let c of categories) {
+                        const idx = c.webhooks ? c.webhooks.findIndex(w => w.id === currentWebhook.id) : -1;
+                        if (idx !== -1) { c.webhooks[idx].previewOffset = off; break; }
+                    }
+                    return off;
+                }
+            } catch (e) { /* ignore */ }
+
+            // fallback to legacy localStorage
+            try {
+                const raw = localStorage.getItem('previewOffsets');
+                const map = raw ? JSON.parse(raw) : null;
+                const used = map ? map[currentWebhook.id] : null;
+                if (used) {
+                    currentWebhook.previewOffset = used;
+                    for (let c of categories) {
+                        const idx = c.webhooks ? c.webhooks.findIndex(w => w.id === currentWebhook.id) : -1;
+                        if (idx !== -1) { c.webhooks[idx].previewOffset = used; break; }
+                    }
+                    return used;
+                }
+            } catch (e) { /* ignore */ }
+
+            return null;
+        } catch (e) { return null; }
+    }
+
+    // Undo/Redo and revert functionality removed per user request
+
+    // Persist preview offsets for the currently selected webhook
+    window.savePreviewOffset = function(offset) {
+        try {
+            if (!currentWebhook) return;
+            // normalize offset shape
+            const o = Object.assign({ x: 0, y: 0, rotate: 0, scale: 1 }, offset || {});
+            currentWebhook.previewOffset = o;
+
+            // persist into categories array if currentWebhook belongs to a category
+            for (let c of categories) {
+                const idx = c.webhooks ? c.webhooks.findIndex(w => w.id === currentWebhook.id) : -1;
+                if (idx !== -1) {
+                    c.webhooks[idx].previewOffset = o;
+                    break;
+                }
+            }
+            // Also persist to IndexedDB (preferred) and fallback to localStorage
+            (async () => {
+                try {
+                    await idbPutOffset(currentWebhook.id, o);
+                } catch (e) {
+                    try {
+                        const key = 'previewOffsets';
+                        const raw = localStorage.getItem(key);
+                        const map = raw ? JSON.parse(raw) : {};
+                        map[currentWebhook.id] = o;
+                        localStorage.setItem(key, JSON.stringify(map));
+                    } catch (e2) { console.warn('Failed to persist preview offsets to localStorage', e2); }
+                }
+            })();
+
+            // history/undo-redo removed: no-op here
+        } catch (e) { console.warn('savePreviewOffset failed', e); }
+    };
 
     // Background controls wiring
     const bgEnableToggle = document.getElementById('bgEnableToggle');
@@ -1106,11 +1311,28 @@ function importConfiguration(file) {
     function applyBackgroundLayerStyles(enabled, opacity, blur) {
         if (!backgroundLayer) return;
         if (!enabled) {
+            // fully hide the layer when disabled (remove image and styles)
+            try {
+                if (_lastBackgroundObjectUrl) { URL.revokeObjectURL(_lastBackgroundObjectUrl); }
+            } catch (e) { /* ignore */ }
+            _lastBackgroundObjectUrl = null;
+            backgroundLayer.style.backgroundImage = '';
             backgroundLayer.style.opacity = '0';
+            try { backgroundLayer.classList.remove('bg-active'); } catch(e) {}
+            try { backgroundLayer.style.visibility = 'hidden'; } catch(e) {}
             backgroundLayer.style.filter = '';
             return;
         }
-        backgroundLayer.style.opacity = (opacity != null ? opacity : 0.35).toString();
+    const op = (opacity != null ? opacity : 0.35);
+    // if opacity effectively zero, hide the layer to prevent visual artifacts
+    if (op <= 0) {
+        backgroundLayer.style.opacity = '0';
+        try { backgroundLayer.classList.remove('bg-active'); } catch(e) {}
+        try { backgroundLayer.style.visibility = 'hidden'; } catch(e) {}
+    } else {
+        backgroundLayer.style.opacity = op.toString();
+        try { backgroundLayer.style.visibility = ''; } catch(e) {}
+    }
         backgroundLayer.style.filter = `blur(${blur != null ? blur : 6}px)`;
     // apply position and rotation if provided on currentWebhook
     const h = (currentWebhook && currentWebhook.bgPosH != null) ? currentWebhook.bgPosH : 50;
@@ -1148,6 +1370,14 @@ function importConfiguration(file) {
     if (bgPosVRange) bgPosVRange.value = posV;
     if (bgRotateRange) bgRotateRange.value = rot;
     applyBackgroundLayerStyles(enabled, opacity, blur);
+    // keep visible background toggle button in sync with the hidden checkbox
+    try {
+        const btn = document.getElementById('bgEnableToggleBtn');
+        if (btn) {
+            if (enabled) btn.classList.add('primary'); else btn.classList.remove('primary');
+            btn.textContent = 'Background';
+        }
+    } catch (e) { /* ignore */ }
     };
 
     // (mini-preview sync function removed — mini-preview UI remains runtime-only)
@@ -1217,31 +1447,130 @@ function importConfiguration(file) {
         const opacity = currentWebhook.bgOpacity != null ? currentWebhook.bgOpacity : 0.35;
         const blur = currentWebhook.bgBlur != null ? currentWebhook.bgBlur : 6;
 
-        // set image source: prefer avatarBgKey for higher-quality background, fall back to avatarKey or avatar URL
+        // set image source atomically: preload blob/URL and only mark the visible button active after successful load
         const layerBgKey = currentWebhook.avatarBgKey || currentWebhook.avatarKey;
+
+        // helper to update visible bg toggle button
+        function setBgToggleVisualState(active) {
+            try {
+                const btn = document.getElementById('bgEnableToggleBtn');
+                if (!btn) return;
+                if (active) btn.classList.add('primary'); else btn.classList.remove('primary');
+                btn.textContent = 'Background';
+            } catch (e) { /* ignore */ }
+        }
+
+        // show/hide loading spinner on the bg toggle button
+        function showBgLoading() {
+            try { const btn = document.getElementById('bgEnableToggleBtn'); if (btn) btn.classList.add('loading'); } catch (e) {}
+        }
+        function hideBgLoading() {
+            try { const btn = document.getElementById('bgEnableToggleBtn'); if (btn) btn.classList.remove('loading'); } catch (e) {}
+        }
+
+        // fallback setter when we have a ready-to-use src (string or object URL)
+        function commitBackgroundSrc(src, isObjectUrl) {
+            try {
+                // clear any body background left by the original updater to avoid double rendering
+                try { document.body.style.backgroundImage = ''; } catch (e) { /* ignore */ }
+                setBackgroundImageToLayer(src, !!isObjectUrl);
+                // apply initial styles (position/blur) but ensure we start from opacity 0 so
+                // the opacity transition can animate to the desired value controlled by the slider.
+                applyBackgroundLayerStyles(enabled, 0, blur);
+                // make layer visible for animation
+                try { backgroundLayer.style.visibility = ''; } catch (e) { /* ignore */ }
+                // force a reflow so subsequent changes animate
+                // eslint-disable-next-line no-unused-expressions
+                void backgroundLayer.offsetWidth;
+                // add transform/scale active class (scale animation)
+                try { if (enabled) backgroundLayer.classList.add('bg-active'); } catch (e) { /* ignore */ }
+                // now animate opacity to the configured value
+                try {
+                    const targetOp = (opacity == null ? 0.35 : opacity);
+                    // small timeout to ensure class transition starts
+                    setTimeout(() => {
+                        try { backgroundLayer.style.opacity = String(targetOp); } catch (e) { /* ignore */ }
+                    }, 20);
+                    // if target is zero, ensure hidden after transition
+                    if ((opacity == null ? 0.35 : opacity) <= 0) {
+                        setTimeout(() => { try { backgroundLayer.style.visibility = 'hidden'; } catch (e) {} }, 360);
+                    }
+                } catch (e) { /* ignore */ }
+                setBgToggleVisualState(true);
+            } catch (e) {
+                // on failure, ensure disabled state
+                setBackgroundImageToLayer(null);
+                applyBackgroundLayerStyles(false);
+                setBgToggleVisualState(false);
+                try { if (document.getElementById('bgEnableToggle')) document.getElementById('bgEnableToggle').checked = false; } catch (e2) {}
+            }
+        }
+
+        // error handler: clear background and mark toggle inactive
+        function backgroundLoadFailed() {
+            try { setBackgroundImageToLayer(null); } catch (e) { /* ignore */ }
+            applyBackgroundLayerStyles(false);
+            // remove active class so CSS anim hides it
+            try { backgroundLayer.classList.remove('bg-active'); } catch (e) { /* ignore */ }
+            setBgToggleVisualState(false);
+            try { if (document.getElementById('bgEnableToggle')) document.getElementById('bgEnableToggle').checked = false; } catch (e) {}
+        }
+
         if (currentWebhook.avatarType === 'indexeddb' && layerBgKey) {
+            // try to load blob from IDB first
+            showBgLoading();
             idbGetBlob(layerBgKey).then(blob => {
                 if (blob) {
                     const objUrl = URL.createObjectURL(blob);
-                    setBackgroundImageToLayer(objUrl, true);
-                    applyBackgroundLayerStyles(enabled, opacity, blur);
+                    commitBackgroundSrc(objUrl, true);
+                    hideBgLoading();
                 } else {
+                    // fallback to avatar URL/data
                     const fallback = currentWebhook.avatar || getAvatarUrl(currentWebhook.avatarType);
-                    setBackgroundImageToLayer(fallback);
-                    applyBackgroundLayerStyles(enabled, opacity, blur);
+                    if (!fallback) { backgroundLoadFailed(); hideBgLoading(); return; }
+                    // if remote URL, try fetch to ensure availability, otherwise commit directly for data URLs
+                    if (/^https?:\/\//i.test(fallback)) {
+                        fetch(fallback).then(r => { if (!r.ok) throw new Error('fetch failed'); return r.blob(); }).then(b => {
+                            const o = URL.createObjectURL(b);
+                            commitBackgroundSrc(o, true);
+                        }).catch(() => { backgroundLoadFailed(); }).finally(() => { hideBgLoading(); });
+                    } else {
+                        commitBackgroundSrc(fallback, false);
+                        hideBgLoading();
+                    }
                 }
             }).catch(() => {
+                // idb read failed, try fallback
                 const fallback = currentWebhook.avatar || getAvatarUrl(currentWebhook.avatarType);
-                setBackgroundImageToLayer(fallback);
-                applyBackgroundLayerStyles(enabled, opacity, blur);
+                if (!fallback) { backgroundLoadFailed(); hideBgLoading(); return; }
+                if (/^https?:\/\//i.test(fallback)) {
+                    showBgLoading();
+                    fetch(fallback).then(r => { if (!r.ok) throw new Error('fetch failed'); return r.blob(); }).then(b => {
+                        const o = URL.createObjectURL(b);
+                        commitBackgroundSrc(o, true);
+                    }).catch(() => { backgroundLoadFailed(); }).finally(() => { hideBgLoading(); });
+                } else {
+                    commitBackgroundSrc(fallback, false);
+                    hideBgLoading();
+                }
             });
         } else {
             const src = currentWebhook.avatar || getAvatarUrl(currentWebhook.avatarType);
-            setBackgroundImageToLayer(src);
-            applyBackgroundLayerStyles(enabled, opacity, blur);
+            if (!src) { backgroundLoadFailed(); }
+            else if (/^https?:\/\//i.test(src)) {
+                // fetch remote, then commit
+                showBgLoading();
+                fetch(src).then(r => { if (!r.ok) throw new Error('fetch failed'); return r.blob(); }).then(b => {
+                    const o = URL.createObjectURL(b);
+                    commitBackgroundSrc(o, true);
+                }).catch(() => { backgroundLoadFailed(); }).finally(() => { hideBgLoading(); });
+            } else {
+                // data URL or local asset
+                commitBackgroundSrc(src, false);
+            }
         }
 
-        // sync UI controls
+        // sync other UI controls (sliders/checkbox state)
         syncBgControlsWithWebhook();
     };
 
@@ -1374,38 +1703,48 @@ function importConfiguration(file) {
         if (d.context === 'webhook') {
             if (!currentWebhook || !currentCategory) return;
 
-            // If custom and a File is provided, compress/resize before saving to reduce export size
+            // If custom and a File is provided, handle images and videos appropriately
             try {
-                if (d.avatarType === 'custom' && d.avatarFile) {
-                    // Compress to a blob and store in IDB, set avatarKey in webhook metadata
-                    const blob = await fileToCompressedBlob(d.avatarFile, 256, 0.75);
-                    const key = `avatar-${currentWebhook.id}`;
-                    await idbPutBlob(key, blob);
-                    currentWebhook.avatar = null; // blob stored in IDB
-                    currentWebhook.avatarKey = key;
-                    currentWebhook.avatarType = 'indexeddb';
-                    // create and store a higher-quality background blob (store the original file to preserve max quality)
-                    try {
-                        const bgBlob = d.avatarFile; // original File is a Blob
-                        const bgKey = `avatar-bg-${currentWebhook.id}`;
-                        await idbPutBlob(bgKey, bgBlob);
-                        currentWebhook.avatarBgKey = bgKey;
-                    } catch (bgErr) {
-                        console.warn('Failed to create/store background blob', bgErr);
+                if (d.avatarType && d.avatarType.toString().startsWith('custom') && d.avatarFile) {
+                    // Only allow image files as webhook avatars for now
+                    if (d.avatarFile.type && d.avatarFile.type.startsWith('image/')) {
+                        // Compress to a blob and store in IDB, set avatarKey in webhook metadata
+                        const blob = await fileToCompressedBlob(d.avatarFile, 256, 0.75);
+                        const key = `avatar-${currentWebhook.id}`;
+                        await idbPutBlob(key, blob);
+                        currentWebhook.avatar = null; // blob stored in IDB
+                        currentWebhook.avatarKey = key;
+                        currentWebhook.avatarType = 'indexeddb';
+                        // store original as background blob if possible
+                        try {
+                            const bgBlob = d.avatarFile; // original File is a Blob
+                            const bgKey = `avatar-bg-${currentWebhook.id}`;
+                            await idbPutBlob(bgKey, bgBlob);
+                            currentWebhook.avatarBgKey = bgKey;
+                        } catch (bgErr) {
+                            console.warn('Failed to create/store background blob', bgErr);
+                        }
+                    } else {
+                        // Reject videos or unsupported types for avatars
+                        showNotification('Videos are not supported as webhook avatars. Please select an image file.', true);
                     }
-                } else if (d.avatarType === 'custom' && d.avatarUrl) {
-                    // fallback if modal provided a dataURL string
-                    currentWebhook.avatar = d.avatarUrl;
-                    currentWebhook.avatarType = 'custom';
-                    // Try to store a background blob from the provided dataURL (if fetchable)
-                    try {
-                        const res = await fetch(d.avatarUrl);
-                        const blob2 = await res.blob();
-                        const bgKey2 = `avatar-bg-${currentWebhook.id}`;
-                        await idbPutBlob(bgKey2, blob2);
-                        currentWebhook.avatarBgKey = bgKey2;
-                    } catch (errBg) {
-                        // ignore background store failure
+                } else if (d.avatarType && d.avatarType.toString().startsWith('custom') && d.avatarUrl) {
+                    // fallback if modal provided a dataURL string (only accept image dataURLs)
+                    if (typeof d.avatarUrl === 'string' && d.avatarUrl.startsWith('data:image/')) {
+                        currentWebhook.avatar = d.avatarUrl;
+                        currentWebhook.avatarType = 'custom';
+                        // Try to store a background blob from the provided dataURL (if fetchable)
+                        try {
+                            const res = await fetch(d.avatarUrl);
+                            const blob2 = await res.blob();
+                            const bgKey2 = `avatar-bg-${currentWebhook.id}`;
+                            await idbPutBlob(bgKey2, blob2);
+                            currentWebhook.avatarBgKey = bgKey2;
+                        } catch (errBg) {
+                            // ignore background store failure
+                        }
+                    } else {
+                        showNotification('Only image data URLs are accepted for avatars.', true);
                     }
                 } else if (d.avatarType === 'url') {
                     currentWebhook.avatar = d.avatarUrl || getAvatarUrl(d.avatarType);
@@ -1442,6 +1781,7 @@ function importConfiguration(file) {
             }
 
             updateWebhookAvatar();
+            try { updateAppBackground(); } catch (e) { /* ignore */ }
             showNotification('Webhook avatar updated');
         } else if (d.context === 'left') {
             leftAvatar = d.avatarType || 'default';
@@ -1703,7 +2043,7 @@ function importConfiguration(file) {
                     const nowCollapsed = slidersWrap.classList.toggle('collapsed');
                     // reflect animation class using collapsible.open so transitions run
                     if (nowCollapsed) slidersWrap.classList.remove('open'); else slidersWrap.classList.add('open');
-                    slidersToggle.textContent = slidersWrap.classList.contains('collapsed') ? 'Show sliders' : 'Hide sliders';
+                    slidersToggle.textContent = slidersWrap.classList.contains('collapsed') ? 'BG Sliders' : 'BG Sliders';
 
                     // add a subtle squeeze to mini preview while sliders animate
                     const mini = document.getElementById('bgMiniPreview');
@@ -1725,7 +2065,7 @@ function importConfiguration(file) {
                 function updateMiniBtn() {
                     const el = document.getElementById('bgMiniPreview');
                     const hidden = el ? (el.classList.contains('hidden') || el.getAttribute('aria-hidden') === 'true') : true;
-                    miniToggle.textContent = hidden ? 'Show preview' : 'Hide preview';
+                    miniToggle.textContent = hidden ? 'Mini preview' : 'Mini preview';
                 }
 
                 miniToggle.addEventListener('click', (ev) => {
@@ -1850,7 +2190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (miniToggle) {
-            miniToggle.textContent = 'Show preview';
+            miniToggle.textContent = 'Mini preview';
         }
     } catch (e) { /* ignore */ }
 });
@@ -1872,7 +2212,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ev.preventDefault();
                 const collapsed = miniSlidersWrap.classList.toggle('collapsed');
                 if (collapsed) miniSlidersWrap.classList.remove('open'); else miniSlidersWrap.classList.add('open');
-                miniSlidersToggle.textContent = miniSlidersWrap.classList.contains('collapsed') ? 'Show mini sliders' : 'Hide mini sliders';
+                miniSlidersToggle.textContent = miniSlidersWrap.classList.contains('collapsed') ? 'Mini Sliders' : 'Mini Sliders';
 
                 // add squeeze to mini preview while sliders animate
                 if (mini) {

@@ -91,8 +91,43 @@ h1 {
     background-position: center center;
     background-repeat: no-repeat;
     z-index: -1; /* sit behind everything */
-    transition: opacity 0.3s ease, filter 0.3s ease, background-image 0.4s ease;
+    /* longer, smoother animation for fade+settle */
+    transition: opacity 0.8s cubic-bezier(.2,.8,.2,1), filter 0.45s ease, background-image 0.6s ease, transform 0.8s cubic-bezier(.2,.8,.2,1);
     opacity: 0; /* default off */
+    transform: scale(1.03); /* start slightly zoomed out so activating looks like subtle zoom-in */
+    will-change: opacity, transform;
+}
+
+/* Active state: fade in and gently settle scale to 1 */
+#backgroundLayer.bg-active {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Spinner indicator for buttons while loading */
+.btn.loading {
+    position: relative;
+    pointer-events: none; /* prevent double-clicks while loading */
+    opacity: 0.9;
+}
+.btn.loading::after {
+    content: '';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.18);
+    border-top-color: rgba(255,255,255,0.95);
+    box-shadow: 0 0 0 0 rgba(0,0,0,0.05);
+    animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: translateY(-50%) rotate(0deg); }
+    to { transform: translateY(-50%) rotate(360deg); }
 }
 
 /* Modernized background controls - compact grid, soft visuals */
@@ -243,6 +278,91 @@ h1 {
         align-items: center;
     }
 }
+
+/* Avatar sliders specific layout: show 4 sliders in one row on wide screens,
+   fall back to 2 columns on narrow screens for readability */
+#avatarSlidersRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(60px));
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+
+@media (max-width: 900px) {
+    #avatarSlidersRow { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+}
+
+@media (max-width: 480px) {
+    #avatarSlidersRow { grid-template-columns: 1fr; }
+}
+
+/* Force avatar slider items to be column-oriented: label above range, full width */
+#avatarSlidersRow .slider-item {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+#avatarSlidersRow .slider-item label {
+    display: block; /* override .bg-controls label flex */
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    color: rgba(255,255,255,0.9);
+}
+#avatarSlidersRow .slider-item input[type="range"] {
+    width: 100%;
+}
+
+/* Stronger rules to ensure avatar sliders show in a single responsive row */
+#avatarSliders, #avatarSlidersRow, .bg-controls #avatarSlidersRow, .bg-controls #avatarSliders {
+    box-sizing: border-box;
+}
+
+
+
+.bg-controls #avatarSlidersRow {
+    /* use a 4-column grid so sliders stay on one line when space allows */
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 14px !important;
+    align-items: start !important;
+    width: 100% !important;
+    
+}
+
+.bg-controls #avatarSlidersRow .slider-item {
+    /* grid children should size naturally; allow them to shrink if needed */
+    display: flex !important;
+    flex-direction: column !important;
+    min-width: 0 !important;
+    padding: 4px 2px !important;
+}
+
+
+@media (max-width: 900px) {
+    .bg-controls #avatarSlidersRow { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 480px) {
+    .bg-controls #avatarSlidersRow { grid-template-columns: 1fr !important; }
+}
+
+/* Make sure labels inside avatar sliders don't inherit the horizontal flex from .bg-controls label */
+.bg-controls #avatarSlidersRow .slider-item label {
+    display: block !important;
+    /* allow label to size naturally so items can sit side-by-side */
+    width: auto !important;
+    margin-bottom: 6px !important;
+    font-size: 0.95rem !important;
+}
+
+/* Give slider container some padding so items don't collapse when toggled */
+#avatarSliders {
+    padding: 10px 6px 6px 6px;
+    grid-column: 1 / -1;
+}
+
+/* debug visuals removed */
 
 /* If options container only has one visible button, make it span full width */
 .bg-controls .top-row #bgOptions.single {
@@ -588,16 +708,19 @@ h1 {
 }
 
 .webhook-avatar img {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    display: block;
-    object-fit: cover;
-    transition: opacity 0.3s;
+     position: absolute;
+     /* center the image within the circular container and make it slightly larger
+         so translating/rotating doesn't reveal empty edges when moved */
+     left: 50%;
+     top: 50%;
+     width: auto;
+     height: 160%; /* enlarge so moves don't expose edges */
+     min-width: 160%;
+     transform: translate(-50%, -50%);
+     object-fit: cover;
+     object-position: center;
+     display: block;
+     transition: transform 0.12s linear, opacity 0.3s;
 }
 
 .webhook-avatar:hover {
@@ -663,6 +786,28 @@ h1 {
     max-height: 150px;
     border-radius: 4px;
     margin-bottom: 8px;
+}
+
+/* Wrap for media thumbnails: center and enlarge media so translating/rotating
+   won't expose clipped edges. Mirrors approach used for circular avatars. */
+.media-wrap {
+    width: 100%;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.06);
+}
+
+.media-wrap .uploaded-media {
+    position: static;
+    max-width: 100%;
+    max-height: 150px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    transition: transform 0.12s linear, opacity 0.3s;
 }
 
 .preview-actions {
